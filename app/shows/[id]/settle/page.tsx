@@ -22,7 +22,8 @@ import {
   Field,
 } from "@/components/ui/card";
 import { StatusBadge, DealTypeBadge, PlainBadge } from "@/components/ui/badge";
-import { calculateSettlement } from "@/lib/dealMath";
+import { calculateSettlement, calculateVsSettlement, parseBonuses } from "@/lib/dealMath";
+import { VsSettlement } from "./vs-settlement";
 import {
   formatMoney,
   formatShowDateFull,
@@ -73,6 +74,18 @@ export default async function SettlePage({
   const totalExpenses = expenses
     .filter((e) => !e.absorbedByVenue)
     .reduce((sum, e) => sum + e.amount, 0);
+  const vsCalc =
+    !calc.supported && deal?.dealType === "vs"
+      ? calculateVsSettlement(
+          grossSoFar,
+          totalFees,
+          totalExpenses,
+          deal.expenseCap ?? null,
+          deal.guaranteeAmount ?? 0,
+          deal.percentage ?? 0,
+          parseBonuses(deal),
+        )
+      : null;
 
   const disputedRecoups = recoups.filter((r) => r.status === "disputed");
   const isDisputed = settlement?.status === "disputed" || settlement?.status === "revised" || !!settlement?.disputedAt;
@@ -128,16 +141,24 @@ export default async function SettlePage({
 
       <div className="space-y-6 mt-6">
         {!calc.supported ? (
-          <UnsupportedDeal
-            dealType={calc.dealType}
-            deal={deal}
-            existingSettlement={settlement}
-            grossSoFar={grossSoFar}
-            totalFees={totalFees}
-            totalExpenses={totalExpenses}
-            ticketCount={ticketSales.reduce((s, t) => s + (t.qty ?? 0), 0)}
-            expenseRowCount={expenses.length}
-          />
+          deal?.dealType === "vs" && vsCalc ? (
+            <VsSettlement
+              vsCalc={vsCalc}
+              expenses={expenses}
+              dealNotesFreetext={deal.dealNotesFreetext}
+            />
+          ) : (
+            <UnsupportedDeal
+              dealType={calc.dealType}
+              deal={deal}
+              existingSettlement={settlement}
+              grossSoFar={grossSoFar}
+              totalFees={totalFees}
+              totalExpenses={totalExpenses}
+              ticketCount={ticketSales.reduce((s, t) => s + (t.qty ?? 0), 0)}
+              expenseRowCount={expenses.length}
+            />
+          )
         ) : (
           <SupportedSettlement calc={calc} existingSettlement={settlement} />
         )}

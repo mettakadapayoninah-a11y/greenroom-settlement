@@ -186,6 +186,73 @@ export function calculateSettlement(input: CalcInput): SettlementCalculation {
   };
 }
 
+export function calculateVsSettlement(
+  grossBoxOffice: number,
+  fees: number,
+  expenses: number,
+  expenseCap: number | null,
+  guarantee: number,
+  percentage: number,
+  bonuses: any[],
+) {
+  const net = grossBoxOffice - fees;
+  const cappedExpenses =
+    expenseCap != null ? Math.min(expenses, expenseCap) : expenses;
+  const netAfterExpenses = net - cappedExpenses;
+  const percentagePayout = netAfterExpenses * percentage;
+  const basePayout = Math.max(guarantee, percentagePayout);
+
+  const walkoutBonus = bonuses.find(
+    (bonus) =>
+      bonus?.type === "gross_threshold" &&
+      typeof bonus.label === "string" &&
+      /walkout pot/i.test(bonus.label),
+  );
+
+  const walkoutThreshold = walkoutBonus?.threshold ?? null;
+
+  const walkoutRate = (() => {
+    if (!walkoutBonus || typeof walkoutBonus.label !== "string") {
+      return null;
+    }
+    const match = walkoutBonus.label.match(/([0-9]+(?:\.[0-9]+)?)% of gross above/i);
+    return match ? Number(match[1]) / 100 : null;
+  })();
+
+  const grossAboveThreshold =
+    walkoutThreshold != null ? Math.max(0, grossBoxOffice - walkoutThreshold) : 0;
+  const walkoutAmount =
+    walkoutThreshold != null && walkoutRate != null
+      ? grossAboveThreshold * walkoutRate
+      : 0;
+
+  const walkoutAmbiguous =
+    !!walkoutBonus &&
+    typeof walkoutBonus.amount === "number" &&
+    walkoutRate != null &&
+    Math.abs(walkoutBonus.amount - walkoutAmount) > 0.01;
+
+  return {
+    grossBoxOffice,
+    fees,
+    net,
+    expenses,
+    expenseCap,
+    cappedExpenses,
+    netAfterExpenses,
+    percentage,
+    percentagePayout,
+    guarantee,
+    basePayout,
+    walkoutBonus: walkoutBonus ?? null,
+    walkoutThreshold,
+    walkoutRate,
+    grossAboveThreshold,
+    walkoutAmount,
+    walkoutAmbiguous,
+  };
+}
+
 /** Evaluate a list of bonuses against the show's actual numbers. */
 function applyBonuses(
   bonuses: Bonus[],
